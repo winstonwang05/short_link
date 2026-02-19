@@ -37,10 +37,10 @@ public class RedissonConfig {
     @Value("${shortlink.cluster.enable-read-write-split:true}")
     private boolean enableReadWriteSplit;
 
-    @Value("${shortlink.cluster.connection-timeout:3000}")
+    @Value("${shortlink.cluster.connection-timeout:10000}")
     private int connectionTimeout;
 
-    @Value("${shortlink.cluster.socket-timeout:3000}")
+    @Value("${shortlink.cluster.socket-timeout:10000}")
     private int socketTimeout;
 
 

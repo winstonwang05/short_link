@@ -23,6 +23,7 @@
 | 监控告警 | Prometheus, Grafana, AlertManager |
 | 日志 | Logback + ELK Stack |
 | 工具库 | Lombok, Guava, Apache Commons Lang3 |
+| 前端框架 | Vue 3, Vite, Element Plus, ECharts, Axios |
 
 ## 项目结构
 
@@ -66,6 +67,26 @@ src/main/resources/
 ├── alertmanager.yml                   # 告警配置
 ├── logback-spring.xml                 # 日志配置
 └── redis/                            # Redis配置文件
+
+frontend/                             # 前端项目
+├── package.json                      # 依赖配置
+├── vite.config.js                    # Vite配置
+├── index.html                        # 入口HTML
+├── src/
+│   ├── main.js                       # 入口文件
+│   ├── App.vue                       # 根组件
+│   ├── router/                       # 路由配置
+│   ├── api/                          # API接口
+│   ├── views/                        # 页面组件
+│   │   ├── Dashboard.vue              # 数据看板
+│   │   ├── Create.vue                # 创建短链
+│   │   ├── List.vue                  # 短链列表
+│   │   ├── Test.vue                  # 重定向测试
+│   │   ├── BloomFilter.vue           # 布隆过滤器
+│   │   ├── Cache.vue                 # 缓存状态
+│   │   └── Monitor.vue               # 系统监控
+│   ├── components/                   # 公共组件
+│   └── utils/                        # 工具函数
 ```
 
 ## 核心架构
@@ -99,11 +120,16 @@ src/main/resources/
 
 ### 环境要求
 
+#### 后端
 - JDK 17+
 - Maven 3.6+
 - MySQL 8.0+
 - Redis 6.0+
 - Nacos 2.0+
+
+#### 前端
+- Node.js 18+
+- npm 或 pnpm
 
 ### 配置步骤
 
@@ -144,10 +170,30 @@ spring:
 
 4. **启动服务**
 
+#### 后端启动
+
 ```bash
 mvn clean package
 java -jar target/short-link.jar
 ```
+
+#### 前端启动
+
+```bash
+# 进入前端目录
+cd frontend
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+
+# 构建生产版本
+npm run build
+```
+
+前端开发服务器默认运行在 `http://localhost:3000`，API 请求会自动代理到后端 `http://localhost:8001`。
 
 ### Docker 部署
 
