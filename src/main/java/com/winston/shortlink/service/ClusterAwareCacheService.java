@@ -1,6 +1,6 @@
 package com.winston.shortlink.service;
 
-import com.alibaba.nacos.common.utils.StringUtils;
+import org.springframework.util.StringUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.winston.shortlink.entity.ShortUrlMapping;
@@ -34,6 +34,7 @@ public class ClusterAwareCacheService {
     private final ObjectMapper objectMapper;
     private final LocalCacheService localCacheService;
     private final ShardingStrategyService shardingStrategyService;
+    private final TieredBloomFilterService tieredBloomFilterService;
 
     @Value("${shortlink.cluster.batch-size:50}")
     private int batchSize;
@@ -183,6 +184,7 @@ public class ClusterAwareCacheService {
         }
     }
 
+
     /**
      * 原链接哈希值映射，key就是原链接哈希，value是shortCode
      * @param originalUrlHash 原链接哈希值
@@ -258,6 +260,20 @@ public class ClusterAwareCacheService {
         } catch (Exception e) {
             log.error("清除集群缓存失败: shortCode={}, error={}", shortCode, e.getMessage());
         }
+    }
+
+    /**
+     * 布隆过滤器检查
+     */
+    public boolean existsInBloomFilter(String shortCode) {
+        return tieredBloomFilterService.mightContain(shortCode);
+    }
+
+    /**
+     * 添加到布隆过滤器
+     */
+    public void addToBloomFilter(String shortCode) {
+        tieredBloomFilterService.put(shortCode);
     }
 
 

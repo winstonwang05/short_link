@@ -1,0 +1,49 @@
+package com.winston.shortlink.repository;
+
+import cn.net.susan.shortlink.entity.ShortUrlMapping;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 短链数据访问层
+ */
+@Repository
+public interface ShortUrlRepository extends JpaRepository<ShortUrlMapping, String> {
+
+    @Query(value = "SELECT * FROM short_url_mapping WHERE origin_url_hash = :originUrlHash LIMIT 1", nativeQuery = true)
+    Optional<ShortUrlMapping> findByOriginUrlHash(@Param("originUrlHash") String originUrlHash);
+
+    @Query(value = "SELECT COUNT(*) > 0 FROM short_url_mapping WHERE origin_url_hash = :originUrlHash", nativeQuery = true)
+    boolean existsByOriginUrlHash(@Param("originUrlHash") String originUrlHash);
+
+    @Query(value = "SELECT * FROM short_url_mapping WHERE short_code = :shortCode LIMIT 1", nativeQuery = true)
+    Optional<ShortUrlMapping> findByShortCode(@Param("shortCode") String shortCode);
+
+    @Query(value = "SELECT * FROM short_url_mapping WHERE origin_url = :originUrl LIMIT 1", nativeQuery = true)
+    Optional<ShortUrlMapping> findByOriginUrl(@Param("originUrl") String originUrl);
+
+    @Query(value = "SELECT COUNT(*) > 0 FROM short_url_mapping WHERE short_code = :shortCode", nativeQuery = true)
+    boolean existsByShortCode(@Param("shortCode") String shortCode);
+
+    @Modifying
+    @Query(value = "UPDATE short_url_mapping SET access_count = access_count + 1 WHERE short_code = :shortCode", nativeQuery = true)
+    int incrementAccessCount(@Param("shortCode") String shortCode);
+
+    @Modifying
+    @Query(value = "UPDATE short_url_mapping SET access_count = access_count + :count WHERE short_code = :shortCode", nativeQuery = true)
+    int incrementAccessCountBatch(@Param("shortCode") String shortCode, @Param("count") Long count);
+
+    @Query(value = "SELECT * FROM short_url_mapping WHERE short_code = :shortCode AND create_time < :expireTime AND expire_days > 0", nativeQuery = true)
+    List<ShortUrlMapping> findExpiredUrlsByShortCode(@Param("shortCode") String shortCode, @Param("expireTime") LocalDateTime expireTime);
+
+    @Modifying
+    @Query(value = "UPDATE short_url_mapping SET access_count = :accessCount WHERE short_code = :shortCode", nativeQuery = true)
+    int updateAccessCount(@Param("shortCode") String shortCode, @Param("accessCount") Long accessCount);
+}

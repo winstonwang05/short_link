@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 public class CreateShortUrlResponse {
     private String shortCode;
     private String shortUrl;
-    private String originalUrl;
+    private String originUrl;
     private LocalDateTime createTime;
     private LocalDateTime expireTime;
     private Integer expireDays;

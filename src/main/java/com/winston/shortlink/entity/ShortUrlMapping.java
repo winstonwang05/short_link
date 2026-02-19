@@ -48,7 +48,7 @@ public class ShortUrlMapping {
      */
     @Column(name = "origin_url_hash", columnDefinition = "VARCHAR", nullable = false)
     @NotBlank(message = "原始URL哈希值不能为空")
-    private String originalUrlHash;
+    private String originUrlHash;
 
     /**
      * 创建时间

@@ -17,11 +17,11 @@ public class CreateShortUrlRequest {
 
     @NotBlank(message = "原始URL不能为空")
     @Size(max = 2048, message = "URL长度不能超过2048个字符")
-    private String originalUrl;
+    private String originUrl;
 
     @Min(value = 1, message = "过期天数最少为1天")
     @Max(value = 7, message = "过期天数最多为7天")
-    private Integer expireTime;
+    private Integer expireDays;
 
     private String creator;
 

@@ -1,6 +1,6 @@
 package com.winston.shortlink.service;
 
-import com.alibaba.nacos.common.utils.StringUtils;
+import org.springframework.util.StringUtils;
 import com.winston.shortlink.entity.ShortUrlMapping;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
