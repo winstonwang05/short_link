@@ -3,6 +3,7 @@ package com.winston.shortlink.controller;
 
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.winston.shortlink.config.MonitoringConfig;
 import com.winston.shortlink.service.ShortUrlService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -25,6 +26,7 @@ public class RedirectController {
 
     private static final Logger logger = LoggerFactory.getLogger(RedirectController.class);
     private final ShortUrlService shortUrlService;
+    private final MonitoringConfig monitoringConfig;
 
     /**
      * 短链跳转
@@ -51,6 +53,7 @@ public class RedirectController {
             // 异步更新访问次数
             try {
                 shortUrlService.updateAccessCountAsync(shortCode);
+                monitoringConfig.getAccessCounter().increment();
             } catch (Exception e) {
                 logger.warn("更新访问次数失败: {}", e.getMessage());
             }

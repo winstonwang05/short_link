@@ -3,6 +3,7 @@ package com.winston.shortlink.service;
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
 
+import com.winston.shortlink.config.MonitoringConfig;
 import com.winston.shortlink.config.ShortCodeConfig;
 import com.winston.shortlink.constant.CommonConstants;
 import com.winston.shortlink.dao.ShortUrlDao;
@@ -51,6 +52,7 @@ public class ShortUrlService {
     private final DistributedLockService distributedLockService;
     private final ShortCodeConfig shortCodeConfig;
     private final ShardingStrategyService shardingStrategyService;
+    private final MonitoringConfig monitoringConfig;
 
     @Value("${shortlink.expansion.dual-write-enabled:false}")
     private boolean dualWriteEnabled;
@@ -72,6 +74,19 @@ public class ShortUrlService {
             fallback = "createShortUrlFallback"
     )
     public CreateShortUrlResponse createShortUrl(CreateShortUrlRequest request) {
+        return monitoringConfig.getCreateTimer().record(() -> {
+            try {
+                CreateShortUrlResponse response = doCreateShortUrl(request);
+                monitoringConfig.getCreateCounter().increment();
+                return response;
+            } catch (Exception e) {
+                monitoringConfig.getCreateFailCounter().increment();
+                throw e;
+            }
+        });
+    }
+
+    private CreateShortUrlResponse doCreateShortUrl(CreateShortUrlRequest request) {
         // 1.获取原始URL的多重哈希值
         List<String> urlHashes = generateMultipleUrlHash(request.getOriginUrl());
         // 2.第一层防护：智能缓存检查（支持多重哈希），增加hash冲突处理逻辑
@@ -99,24 +114,12 @@ public class ShortUrlService {
             int dbIndex = Math.abs(initialShortCode.hashCode()) % NEW_SHARDING_DATABASE_COUNT;
             int tableIndex = Math.abs(initialShortCode.hashCode()) % NEW_SHARDING_TABLE_COUNT;
 
-            // 第一重检查
-            ShortUrlMapping mapping = shortUrlDao.preCheckByShortCode(dbIndex, tableIndex, initialShortCode, primaryUrlHash)
-                    .orElse(null);
-            if (mapping != null) {
-                // 缓存查询结果
-                clusterAwareCacheService.putToCache(mapping.getShortCode(), mapping);
-                clusterAwareCacheService.putUrlHashMapping(primaryUrlHash, mapping.getShortCode());
-                log.info("数据库智能查询命中，返回已存在短链: shortCode={}, originUrl={}",
-                        mapping.getShortCode(), request.getOriginUrl());
-                return buildResponse(mapping);
-            }
-
             try {
-                // 4.第三层防护：数据库事务 + 唯一索引
+                // 4.第三层防护：使用编程式事务精确控制事务范围
                 return transactionTemplate.execute(status -> {
                     try {
                         String currentShortCode = initialShortCode;
-                        // 检查生成的短链code是否已存在（避免哈希冲突）
+
                         Optional<ShortUrlMapping> existingByCode = shortUrlDao.findByShortCode(currentShortCode);
                         if  (existingByCode.isPresent()) {
                             ShortUrlMapping existing = existingByCode.get();
@@ -264,25 +267,22 @@ public class ShortUrlService {
     private CacheCheckResult smartCacheCheck(String originalUrl, List<String> urlHashes) {
         // 1.遍历多重哈希值
         for (String urlHash : urlHashes) {
-            // 2.获取哈希映射
+            // 2.只查缓存，不查布隆/DB
             String cachedShortCode = clusterAwareCacheService.getShortCodeByUrlHash(urlHash);
             if (StringUtils.isNotBlank(cachedShortCode)) {
-                // 3.判断是否存在实体类，如果存在
-                CreateShortUrlResponse cachedResponse = getShortUrlInfo(cachedShortCode);
-                // 3.1 判断原始URL是否一致
-                if (cachedResponse != null && originalUrl.equals(cachedResponse.getOriginUrl())) {
+                // 3.拿短码去缓存查实体类
+                ShortUrlMapping cachedMapping = clusterAwareCacheService.getFromCache(cachedShortCode);
+                if (cachedMapping != null && originalUrl.equals(cachedMapping.getOriginUrl())) {
                     log.info("智能缓存命中: urlHash={}, shortCode={}, originUrl={}",
                             urlHash, cachedShortCode, originalUrl);
-                    return new CacheCheckResult(cachedResponse, urlHash);
+                    return new CacheCheckResult(buildResponse(cachedMapping), urlHash);
                 } else {
-                    // 发现哈希冲突，记录日志但不删除映射（因为这可能是其他URL的正确映射）
+                    // 哈希冲突，跳过继续下一个
                     log.warn("检测到哈希冲突，跳过此哈希值: urlHash={}, 缓存URL={}, 请求URL={}",
-                            urlHash, cachedResponse != null ? cachedResponse.getOriginUrl() : "null", originalUrl);
-                    // 不删除映射，继续尝试下一个哈希值
+                            urlHash, cachedMapping != null ? cachedMapping.getOriginUrl() : "null", originalUrl);
                 }
             } else {
-                // 4.如果不存在，直接利用该哈希值
-                // 找到第一个可用的哈希值，直接返回
+                // 4.找到第一个可用的哈希值，直接返回
                 log.debug("找到可用哈希值: urlHash={}", urlHash);
                 return new CacheCheckResult(null, urlHash);
             }
@@ -440,8 +440,7 @@ public class ShortUrlService {
     }
 
     public CreateShortUrlResponse createShortUrlFallback(CreateShortUrlRequest request, Throwable ex) {
-        log.error("创建短链降级: originUrl={}, error={}",
-                request != null ? request.getOriginUrl() : "null", ex.getMessage());
+        log.warn("创建短链被降级: originUrl={}", request != null ? request.getOriginUrl() : "null");
         CreateShortUrlResponse response = new CreateShortUrlResponse();
         response.setShortCode("SERVICE_DEGRADED");
         response.setShortUrl("创建短链失败，请稍后重试");
@@ -477,7 +476,5 @@ public class ShortUrlService {
         log.error("数据库查询降级: shortCode={}, error={}", shortCode, ex.getMessage());
         return null;
     }
-
-
 
 }

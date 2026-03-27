@@ -1,5 +1,6 @@
 package com.winston.shortlink.service;
 
+import com.winston.shortlink.config.MonitoringConfig;
 import org.springframework.util.StringUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +36,7 @@ public class ClusterAwareCacheService {
     private final LocalCacheService localCacheService;
     private final ShardingStrategyService shardingStrategyService;
     private final TieredBloomFilterService tieredBloomFilterService;
+    private final MonitoringConfig monitoringConfig;
 
     @Value("${shortlink.cluster.batch-size:50}")
     private int batchSize;
@@ -56,6 +58,7 @@ public class ClusterAwareCacheService {
         ShortUrlMapping shortUrlMapping = localCacheService.getFromLocalCache(shortCode);
         if (shortUrlMapping != null) {
             log.debug("本地缓存命中： {}", shortUrlMapping);
+            monitoringConfig.recordCacheHit();
             return shortUrlMapping;
         }
         // 2.本地缓存未命中，从Redis集群获取
@@ -64,7 +67,10 @@ public class ClusterAwareCacheService {
         if (shortUrlMapping != null) {
             log.debug("Redis集群缓存命中: {}, 分片槽位: {}",
                     shortCode, shardingStrategyService.calculateSlot(shortCode));
+            monitoringConfig.recordCacheHit();
             localCacheService.safePutToLocalCache(shortCode, shortUrlMapping);
+        } else {
+            monitoringConfig.recordCacheMiss();
         }
         return shortUrlMapping;
     }

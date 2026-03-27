@@ -155,7 +155,7 @@ public class ShortCodeGenerator {
                 long seq = sequence.incrementAndGet() & MAX_SEQUENCE;
                 if (seq == 0) {
                     // 3.如果序列计数满了，利用下一毫秒的时间戳，计数重置
-                    currentTimestamp= waitNextMillis(currentTimestamp);
+                    currentTimestamp = waitNextMillis(currentTimestamp);
                     sequence.set(0L);
                 }
             } else {

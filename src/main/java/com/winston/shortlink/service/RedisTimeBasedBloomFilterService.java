@@ -197,7 +197,9 @@ public class RedisTimeBasedBloomFilterService {
                 log.error("添加到Redis时间分片失败: slice={}, shortCode={}", currentTimeSlice, shortCode, e);
             }
         }
-        // 3.广播
+        // 3.同步到本节点本地布隆过滤器
+        localBloomFilterService.addLocal(shortCode);
+        // 4.广播到其他节点
         try {
             bloomFilterStreamService.publishNewShortCode(shortCode);
         } catch (Exception e) {

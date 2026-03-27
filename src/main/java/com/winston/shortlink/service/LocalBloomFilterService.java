@@ -81,17 +81,23 @@ public class LocalBloomFilterService {
      * @param shortCode 添加的数据
      */
     public void addLocal(String shortCode) {
-        String sliceKey = currentLocalTimeSlice;
-        if (currentLocalTimeSlice == null) {
-            String currentLocalSliceKey = getCurrentLocalSliceKey();
-            createLocalTimeSlice(currentLocalSliceKey);
-            sliceKey = currentLocalSliceKey;
+        // 检测时间片是否需要切换
+        String expectedSliceKey = getCurrentLocalSliceKey();
+        if (!expectedSliceKey.equals(currentLocalTimeSlice)) {
+            synchronized (this) {
+                if (!expectedSliceKey.equals(currentLocalTimeSlice)) {
+                    createLocalTimeSlice(expectedSliceKey);
+                    currentLocalTimeSlice = expectedSliceKey;
+                    log.info("本地时间片切换: {}", expectedSliceKey);
+                }
+            }
         }
+        String sliceKey = currentLocalTimeSlice;
         TimeSliceBloomFilter timeSliceBloomFilter = localBloomSlices.get(sliceKey);
         if (timeSliceBloomFilter != null) {
             timeSliceBloomFilter.add(shortCode);
         }
-        log.debug("本地添加短链到时间片布隆过滤器: {} (片: {})", shortCode, timeSliceBloomFilter);
+        log.debug("本地添加短链到时间片布隆过滤器: {} (片: {})", shortCode, sliceKey);
     }
     @Scheduled(fixedRate = 300000)
     public void cleanupLocalSlices() {
