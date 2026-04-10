@@ -21,14 +21,11 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class LocalCacheService {
-    /**
-     * 自注入，@Lazy防止循环依赖，自注入可以是调用本类方法注解不会失效
-     */
-    @Lazy
-    @Autowired
-    private LocalCacheService localCacheService;
-
     private final LocalCacheStreamService localCacheStreamService;
+
+    @Autowired
+    @Lazy
+    private LocalCacheService self;
 
     /**
      * 从本地缓存中获取数据，无需广播，如果本地缓存查询得到，不会执行方法体内容
@@ -57,7 +54,7 @@ public class LocalCacheService {
                 log.warn("safeGetFromLocalCache: shortCode无效, value='{}'", shortCode);
                 return null;
             }
-            return localCacheService.getFromLocalCache(shortCode);
+            return self.getFromLocalCache(shortCode);
         } catch (Exception e) {
             log.error("safeGetFromLocalCache失败: shortCode='{}', error={}",
                     shortCode, e.getMessage(), e);
@@ -101,7 +98,7 @@ public class LocalCacheService {
             if (localCacheStreamService != null) {
                 localCacheStreamService.publishCachePut(shortCode);
             }
-            return localCacheService.putToLocalCacheOnly(shortCode, shortUrlMapping);
+            return self.putToLocalCacheOnly(shortCode, shortUrlMapping);
         } catch (Exception e) {
             log.error("safePutToLocalCache失败: shortCode='{}', error={}",
                     shortCode, e.getMessage(), e);
@@ -141,7 +138,7 @@ public class LocalCacheService {
             if  (localCacheStreamService != null) {
                 localCacheStreamService.publishCacheEvict(shortCode);
             }
-            localCacheService.evictFromLocalCacheOnly(shortCode);
+            self.evictFromLocalCacheOnly(shortCode);
         }  catch (Exception e) {
             log.error("safeEvictFromLocalCache失败: shortCode='{}', error={}",
                     shortCode, e.getMessage(), e);

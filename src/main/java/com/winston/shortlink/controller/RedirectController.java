@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 import static org.bouncycastle.asn1.x500.style.RFC4519Style.cn;
 
@@ -50,18 +51,20 @@ public class RedirectController {
                 return;
             }
 
-            // 异步更新访问次数
-            try {
-                shortUrlService.updateAccessCountAsync(shortCode);
-                monitoringConfig.getAccessCounter().increment();
-            } catch (Exception e) {
-                logger.warn("更新访问次数失败: {}", e.getMessage());
-            }
-
-            // 执行重定向
+            // 先执行重定向，不让计数逻辑阻塞用户响应
             response.setStatus(HttpStatus.MOVED_PERMANENTLY.value());
             response.setHeader("Location", shortUrlInfo.getOriginUrl());
             response.setHeader("Cache-Control", "public, max-age=3600");
+
+            // 真正的异步更新访问次数，不阻塞跳转主流程
+            CompletableFuture.runAsync(() -> {
+                try {
+                    shortUrlService.updateAccessCountAsync(shortCode);
+                    monitoringConfig.getAccessCounter().increment();
+                } catch (Exception e) {
+                    logger.warn("异步更新访问次数失败: {}", e.getMessage());
+                }
+            });
 
         } catch (Exception e) {
             logger.error("短链跳转异常: {}", e.getMessage(), e);

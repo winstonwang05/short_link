@@ -71,7 +71,6 @@ public class ApiResponse<T> {
     public static <T> ApiResponse<T> internalError(String message) {
         return new ApiResponse<>(500, message);
     }
-
     // getter 和 setter方法
     public Integer getCode() {
         return code;

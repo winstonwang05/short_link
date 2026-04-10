@@ -78,6 +78,6 @@ public class GlobalExceptionHandler {
         logger.error("系统异常: {}", e.getMessage(), e);
         return ApiResponse.internalError("系统内部错误，请稍后重试");
     }
-
+    
 
 }

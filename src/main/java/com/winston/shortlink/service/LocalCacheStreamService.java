@@ -130,12 +130,13 @@ public class LocalCacheStreamService implements ApplicationContextAware {
     private void processRecords(List<MapRecord<String, Object, Object>> records) {
         for  (MapRecord<String, Object, Object> record : records) {
             try {
-                String action = (String) record.getValue().get("action");
-                String shortCode = (String) record.getValue().get("shortCode");
-                String sourceNode = (String) record.getValue().get("sourceNode");
-                String timestamp = (String) record.getValue().get("timestamp");
+                Map<Object, Object> message = record.getValue();
+                String action = toStringValue(message.get("action"));
+                String shortCode = toStringValue(message.get("shortCode"));
+                String sourceNode = toStringValue(message.get("sourceNode"));
+                Long timestamp = toLongValue(message.get("timestamp"));
                 // 不能消费自己的消费
-                if (!sourceNode.equals(nodeId)) {
+                if (sourceNode != null && !sourceNode.equals(nodeId)) {
                     switch (action) {
                         case "PUT" ->{
                             // 从Redis缓存中获取完整数据并同步到本地缓存
@@ -152,11 +153,32 @@ public class LocalCacheStreamService implements ApplicationContextAware {
                     }
                 }
 
+                if (timestamp != null) {
+                    log.trace("处理本地缓存Stream消息, timestamp={}", timestamp);
+                }
                 // 确认消息处理完成(ACK)
                 redisTemplate.opsForStream().acknowledge(STREAM_KEY, consumerGroup, record.getId());
             } catch (Exception e) {
                 log.error("处理本地缓存Stream记录失败: {}", record, e);
             }
+        }
+    }
+
+    private String toStringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Long toLongValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 

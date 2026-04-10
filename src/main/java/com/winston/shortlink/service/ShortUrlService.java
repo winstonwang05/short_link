@@ -352,8 +352,9 @@ public class ShortUrlService {
         String sha256 = DigestUtils.sha256(url);
         urlHashes.add(sha256);
 
-        // 备用哈希2：带时间戳盐值得MD5 // 秒级时间戳
-        String saltedUrl = url + "_" + System.currentTimeMillis() / 1000;
+        // 备用哈希2：固定盐值 + URL 拼接后再MD5
+        // 使用固定盐值保证同一URL在任意时间生成相同的哈希，确保缓存预检查的幂等性
+        String saltedUrl = "shortlink_salt_v1:" + url;
         urlHashes.add(DigestUtils.md5(saltedUrl));
 
         return urlHashes;
@@ -429,52 +430,79 @@ public class ShortUrlService {
         response.setAccessCount(shortUrlMapping.getAccessCount());
         return response;
     }
-    // ==================== Sentinel 处理方法 ====================
+    // ====== BlockHandler: 限流直接抛异常，返回429 ======
 
     public CreateShortUrlResponse createShortUrlBlockHandler(CreateShortUrlRequest request, BlockException ex) {
         log.warn("创建短链被限流: originUrl={}", request != null ? request.getOriginUrl() : "null");
-        CreateShortUrlResponse response = new CreateShortUrlResponse();
-        response.setShortCode("RATE_LIMITED");
-        response.setShortUrl("系统繁忙，请稍后重试");
-        return response;
-    }
-
-    public CreateShortUrlResponse createShortUrlFallback(CreateShortUrlRequest request, Throwable ex) {
-        log.warn("创建短链被降级: originUrl={}", request != null ? request.getOriginUrl() : "null");
-        CreateShortUrlResponse response = new CreateShortUrlResponse();
-        response.setShortCode("SERVICE_DEGRADED");
-        response.setShortUrl("创建短链失败，请稍后重试");
-        return response;
+        throw new RuntimeException("系统繁忙，创建短链请求被限流，请稍后重试");
     }
 
     public CreateShortUrlResponse getShortUrlInfoBlockHandler(String shortCode, BlockException ex) {
         log.warn("查询短链信息被限流: shortCode={}", shortCode);
-        return null;
-    }
-
-    public CreateShortUrlResponse getShortUrlInfoFallback(String shortCode, Throwable ex) {
-        log.error("查询短链信息降级: shortCode={}, error={}", shortCode, ex.getMessage());
-        return null;
+        throw new RuntimeException("系统繁忙，查询请求被限流，请稍后重试");
     }
 
     public String getOriginUrlBlockHandler(String shortCode, BlockException ex) {
         log.warn("获取原始URL被限流: shortCode={}", shortCode);
-        return null;
-    }
-
-    public String getOriginUrlFallback(String shortCode, Throwable ex) {
-        log.error("获取原始URL降级: shortCode={}, error={}", shortCode, ex.getMessage());
-        return null;
+        throw new RuntimeException("系统繁忙，请稍后重试");
     }
 
     public ShortUrlMapping databaseQueryBlockHandler(String shortCode, BlockException ex) {
         log.warn("数据库查询被限流: shortCode={}", shortCode);
-        return null;
+        throw new RuntimeException("系统繁忙，请稍后重试");
+    }
+
+    // ====== Fallback: 业务异常降级，优先尝试缓存兜底 ======
+
+    public CreateShortUrlResponse createShortUrlFallback(CreateShortUrlRequest request, Throwable ex) {
+        log.warn("创建短链降级: originUrl={}, error={}", request != null ? request.getOriginUrl() : "null", ex.getMessage());
+        // 创建操作无法降级，直接抛异常
+        throw new RuntimeException("创建短链服务暂时不可用，请稍后重试");
+    }
+
+    public CreateShortUrlResponse getShortUrlInfoFallback(String shortCode, Throwable ex) {
+        log.warn("查询短链降级，尝试缓存兜底: shortCode={}, error={}", shortCode, ex.getMessage());
+        // 尝试从缓存获取降级数据
+        try {
+            ShortUrlMapping cached = clusterAwareCacheService.getFromCache(shortCode);
+            if (cached != null && !cached.isExpired()) {
+                log.info("降级成功，缓存兜底命中: shortCode={}", shortCode);
+                return buildResponse(cached);
+            }
+        } catch (Exception cacheEx) {
+            log.warn("降级缓存查询也失败: shortCode={}", shortCode);
+        }
+        throw new RuntimeException("查询服务暂时不可用，请稍后重试");
+    }
+
+    public String getOriginUrlFallback(String shortCode, Throwable ex) {
+        log.warn("获取原始URL降级，尝试缓存兜底: shortCode={}, error={}", shortCode, ex.getMessage());
+        // 尝试从缓存获取降级数据
+        try {
+            ShortUrlMapping cached = clusterAwareCacheService.getFromCache(shortCode);
+            if (cached != null && !cached.isExpired()) {
+                log.info("降级成功，缓存兜底命中: shortCode={}", shortCode);
+                return cached.getOriginUrl();
+            }
+        } catch (Exception cacheEx) {
+            log.warn("降级缓存查询也失败: shortCode={}", shortCode);
+        }
+        throw new RuntimeException("跳转服务暂时不可用，请稍后重试");
     }
 
     public ShortUrlMapping databaseQueryFallback(String shortCode, Throwable ex) {
-        log.error("数据库查询降级: shortCode={}, error={}", shortCode, ex.getMessage());
-        return null;
+        log.warn("数据库查询降级，尝试缓存兜底: shortCode={}, error={}", shortCode, ex.getMessage());
+        // 数据库挂了，尝试从缓存兜底
+        try {
+            ShortUrlMapping cached = clusterAwareCacheService.getFromCache(shortCode);
+            if (cached != null) {
+                log.info("数据库降级成功，缓存兜底命中: shortCode={}", shortCode);
+                return cached;
+            }
+        } catch (Exception cacheEx) {
+            log.warn("降级缓存查询也失败: shortCode={}", shortCode);
+        }
+        throw new RuntimeException("数据查询服务暂时不可用，请稍后重试");
     }
 
 }
